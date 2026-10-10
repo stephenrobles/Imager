@@ -7,6 +7,21 @@ struct SettingsView: View {
     @Environment(OptimizationQueue.self) private var queue
     @State private var forgotCache = false
 
+    private var convertDescription: String {
+        switch settings.convertFormat {
+        case .keep:
+            "Images are optimized in their own format. Pick a format to re-encode every dropped image first: AVIF gives the smallest files and is supported by every current browser and by macOS 26; HEIC is Apple's format for photos; JPEG and PNG are converted and then run through the usual optimizers."
+        case .avif:
+            "Every dropped PNG, JPEG, GIF, HEIC, WebP, TIFF or BMP is re-encoded as AVIF at this quality using the encoder built into macOS. 80% looks like the original on most photos at a fraction of the size. Animated GIFs and SVGs are left in their own format and optimized instead."
+        case .heic:
+            "Every dropped raster image is re-encoded as HEIC at this quality using the encoder built into macOS. Animated GIFs and SVGs are left in their own format and optimized instead."
+        case .jpeg:
+            "Every dropped raster image is re-encoded as JPEG at this quality, then run through jpegoptim and MozJPEG. Transparency is flattened. Animated GIFs and SVGs are left in their own format."
+        case .png:
+            "Every dropped raster image is re-encoded as PNG (lossless), then run through the PNG optimizers. Photos usually get larger this way; this is for turning HEIC, WebP or JPEG files into PNGs when you need them. Animated GIFs and SVGs are left in their own format."
+        }
+    }
+
     /// Tall enough to show a tab without scrolling on a big display, never taller than the screen.
     private var windowHeight: CGFloat {
         let screen = NSScreen.main?.visibleFrame.height ?? 800
@@ -75,6 +90,36 @@ struct SettingsView: View {
                         Toggle("Strip PNG metadata (gamma, color profiles, comments)", isOn: $settings.stripPNGMetadata)
                         Toggle("Strip JPEG metadata (EXIF, color profiles, GPS, rotation)", isOn: $settings.stripJPEGMetadata)
                         Text("Stripping PNG gamma and color profiles makes colors consistent across browsers, which don't all honor them. JPEG metadata includes the camera, exposure, location and any embedded copyright notice; the image stays protected by copyright either way. A JPEG that relies on its EXIF orientation flag will appear rotated once the flag is gone.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .formStyle(.grouped)
+            }
+            Tab("Convert", systemImage: "arrow.triangle.2.circlepath") {
+                Form {
+                    Section("Format") {
+                        Picker("Convert dropped images to", selection: $settings.convertFormat) {
+                            ForEach(ConvertFormat.allCases, id: \.self) { Text($0.title).tag($0) }
+                        }
+                        if settings.convertFormat.isLossy {
+                            LabeledContent("Quality") {
+                                HStack {
+                                    Slider(value: Binding(get: { Double(settings.convertQuality) }, set: { settings.convertQuality = Int($0.rounded()) }),
+                                           in: Double(AppSettings.qualityRange.lowerBound)...Double(AppSettings.qualityRange.upperBound), step: 5)
+                                    Text("\(settings.convertQuality)%")
+                                        .monospacedDigit()
+                                        .frame(width: 44, alignment: .trailing)
+                                }
+                            }
+                        }
+                        Text(convertDescription)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Section("Files") {
+                        Toggle("Keep the original file", isOn: $settings.keepOriginalWhenConverting)
+                        Text("The converted file takes the original's name with the new extension, next to it. By default the original goes to the Trash so Revert to Original can bring it back; keeping it leaves both files in place.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

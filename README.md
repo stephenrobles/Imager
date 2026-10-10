@@ -17,6 +17,12 @@ for macOS 26 and later.
   with the space bar.
 - Settings: effort level (fastest to insane), which tools run, metadata stripping, preserving
   permissions and dates, low priority, and what happens when a batch finishes.
+- **Convert** (toolbar menu, Settings › Convert, or Optimize › Convert To) re-encodes every dropped
+  image as AVIF, HEIC, JPEG or PNG first, with the encoder built into macOS 26 (no extra codecs).
+  Quality is a slider (80% by default). With a format chosen, HEIC, WebP, TIFF and BMP files are
+  accepted as well. The converted file takes the original's name with the new extension and the
+  original goes to the Trash (or stays, with a switch); converted JPEGs and PNGs then go through the
+  optimizers. Animated GIFs and SVGs are left in their own format.
 - Everything runs on the Mac; nothing is uploaded.
 
 ## How it works
@@ -45,7 +51,9 @@ builds without it. SVGO is bundled as `Imager/Resources/svgo.js` by the same scr
 - Xcode 27 project, macOS 26 or later, Swift with approachable concurrency and MainActor default
   isolation. Sources live in `Imager/` as a synchronized folder: `Model/` has the queue, jobs,
   tool wrappers, file saving and the results cache; `Views/` the SwiftUI.
-- `OptimizationJob` owns one file's pipeline; `OptimizationQueue` holds the list, walks folders
+- `ImageConverter` wraps ImageIO (`CGImageDestination`) for the Convert feature; `FileSaver.placeConverted`
+  names and places the result and `revertConversion` undoes it.
+- `OptimizationJob` owns one file's pipeline (conversion first, then the tools); `OptimizationQueue` holds the list, walks folders
   and limits concurrent tool processes to the core count (`CPUScheduler`). `ToolProcess` wraps
   `Process` so a cancelled task kills the tool. `FileSaver` replaces the file (in place when
   preserving permissions) and trashes the original for Revert.

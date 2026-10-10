@@ -8,8 +8,10 @@ final class OptimizationJob: Identifiable {
     enum Status: Equatable {
         case waiting
         case inspecting
+        case converting(String)
         case running(String)
         case optimized(String)
+        case converted(String)
         case unchanged
         case stopped
         case reverted
@@ -17,7 +19,7 @@ final class OptimizationJob: Identifiable {
 
         var isBusy: Bool {
             switch self {
-            case .waiting, .inspecting, .running: true
+            case .waiting, .inspecting, .converting, .running: true
             default: false
             }
         }
@@ -41,6 +43,8 @@ final class OptimizationJob: Identifiable {
     private(set) var lossyUsed = false
     /// True from start until the pipeline (and the save) has finished.
     private(set) var isBusy = false
+    /// Where the file was before a conversion gave it a new name.
+    private(set) var originalURL: URL?
 
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var runCount = 0
@@ -54,16 +58,19 @@ final class OptimizationJob: Identifiable {
     }
 
     var isOptimized: Bool {
-        if case .optimized = status { return true }
-        return false
+        switch status {
+        case .optimized, .converted: true
+        default: false
+        }
     }
 
     var canRevert: Bool { revertURL != nil && !isBusy }
 
-    /// Fraction saved so far, nil until there is something to show.
+    /// Fraction saved so far (negative when a conversion made the file bigger), nil until there is
+    /// something to show.
     var savings: Double? {
         guard let originalSize, originalSize > 0, let currentSize else { return nil }
-        if currentSize >= originalSize { return status.isFinished ? 0 : nil }
+        if currentSize >= originalSize, originalURL == nil { return status.isFinished ? 0 : nil }
         return 1 - Double(currentSize) / Double(originalSize)
     }
 
@@ -71,8 +78,10 @@ final class OptimizationJob: Identifiable {
         switch status {
         case .waiting: "Waiting to be optimized"
         case .inspecting: "Inspecting the file"
+        case .converting(let format): "Converting to \(format)"
         case .running(let tool): "Running \(tool)"
         case .optimized(let tool): "Optimized with \(tool)"
+        case .converted(let format): "Converted to \(format)"
         case .unchanged: "Already as small as these tools can make it"
         case .stopped: "Stopped"
         case .reverted: "Reverted to the original"
@@ -104,8 +113,15 @@ final class OptimizationJob: Identifiable {
     func revert() -> Bool {
         guard canRevert, let revertURL, let revertSize else { return false }
         do {
-            let restored = try FileSaver.revert(original: url, from: revertURL, expectedSize: revertSize)
-            url = restored
+            if let originalURL {
+                try FileSaver.revertConversion(converted: url, original: originalURL, from: revertURL, expectedSize: revertSize)
+                url = originalURL
+                self.originalURL = nil
+                displayName = FileManager.default.displayName(atPath: url.path)
+                kind = nil
+            } else {
+                url = try FileSaver.revert(original: url, from: revertURL, expectedSize: revertSize)
+            }
             self.revertURL = nil
             self.revertSize = nil
             savedSize = nil
@@ -143,8 +159,8 @@ final class OptimizationJob: Identifiable {
             fail("Can't open the file")
             return
         }
-        guard let kind = probe.kind else {
-            fail("Not a PNG, JPEG, GIF or SVG file")
+        guard var kind = probe.kind else {
+            fail(settings.isConverting ? "Not an image Imager can read" : "Not a PNG, JPEG, GIF or SVG file")
             return
         }
         self.kind = kind
@@ -161,18 +177,69 @@ final class OptimizationJob: Identifiable {
             savedSize = nil
             revertURL = nil
             revertSize = nil
+            originalURL = nil
             bestTool = nil
             lossyUsed = false
             runCount = 0
         }
         best = nil
         currentSize = probe.size
+        var size = probe.size
+        var convertedTo: ConvertFormat?
+
+        // Conversion comes first; the optimizers then see the new file.
+        if settings.isConverting, let target = settings.convertFormat.kind, kind != target, kind.isConvertible {
+            status = .converting(settings.convertFormat.title)
+            do {
+                if let converted = try await Self.convert(url: url, settings: settings) {
+                    let outcome = try await Self.place(original: url, converted: converted, settings: settings)
+                    originalURL = url
+                    url = outcome.url
+                    displayName = FileManager.default.displayName(atPath: url.path)
+                    if let trashed = outcome.revertURL, revertURL == nil {
+                        revertURL = trashed
+                        revertSize = probe.size
+                    }
+                    kind = target
+                    self.kind = target
+                    size = converted.size
+                    savedSize = size
+                    currentSize = size
+                    convertedTo = settings.convertFormat
+                    toolResults[settings.convertFormat.title] = size
+                    bestTool = settings.convertFormat.title
+                }
+            } catch is CancellationError {
+                status = .stopped
+                return
+            } catch {
+                fail(error.localizedDescription)
+                return
+            }
+        }
+
+        guard kind.isOptimizable else {
+            if let convertedTo {
+                status = .converted(convertedTo.title)
+            } else if settings.isConverting, settings.convertFormat.kind == kind {
+                status = .unchanged
+                bestTool = nil
+            } else {
+                fail("\(kind.name) files can be converted, not optimized. Pick a format in the toolbar.")
+            }
+            return
+        }
+
         let level = min(settings.level + (ranBefore ? 1 : 0), AppSettings.levelRange.upperBound + 1)
-        let input = ToolInput(url: url, size: probe.size, kind: kind)
+        let input = ToolInput(url: url, size: size, kind: kind)
 
         let plan = Self.plan(for: input, settings: settings, level: level, ranBefore: ranBefore, lossyAlreadyApplied: lossyUsed)
         guard !plan.first.isEmpty || !plan.later.isEmpty else {
-            fail("Every tool for \(kind.name) files is turned off in Settings")
+            if let convertedTo {
+                status = .converted(convertedTo.title)
+            } else {
+                fail("Every tool for \(kind.name) files is turned off in Settings")
+            }
             return
         }
         if settings.lossy, plan.first.contains(where: \.changesContent) || plan.later.contains(where: \.changesContent) {
@@ -187,7 +254,7 @@ final class OptimizationJob: Identifiable {
         } catch {
             cacheKey = nil
         }
-        if let cacheKey, await queue.cache.contains(cacheKey) {
+        if convertedTo == nil, let cacheKey, await queue.cache.contains(cacheKey) {
             status = .unchanged
             return
         }
@@ -228,7 +295,7 @@ final class OptimizationJob: Identifiable {
         }
 
         // Save whatever is smallest, even after a stop or a tool failure.
-        if let best, let originalSize, best.size < (savedSize ?? originalSize) {
+        if let best, best.size < (savedSize ?? originalSize ?? Int.max) {
             do {
                 let outcome = try await Self.save(url: url, best: best, settings: settings)
                 url = outcome.url
@@ -239,7 +306,7 @@ final class OptimizationJob: Identifiable {
                 savedSize = best.size
                 currentSize = best.size
                 self.best = nil
-                status = .optimized(bestTool ?? "")
+                status = convertedTo.map { .converted($0.title) } ?? .optimized(bestTool ?? "")
             } catch {
                 self.best = nil
                 fail(error.localizedDescription)
@@ -248,6 +315,9 @@ final class OptimizationJob: Identifiable {
             fail(failure.localizedDescription)
         } else if wasStopped {
             status = .stopped
+            currentSize = savedSize ?? originalSize
+        } else if let convertedTo {
+            status = .converted(convertedTo.title)
             currentSize = savedSize ?? originalSize
         } else {
             status = .unchanged
@@ -293,10 +363,10 @@ final class OptimizationJob: Identifiable {
     private func updateBestTool() {
         guard let originalSize else { return }
         var smallestTool: String?
-        var smallest = savedSize ?? originalSize
+        var smallest = originalSize
         var biggestStepTool: String?
         var biggestStep = 0.0
-        var previous = Double(savedSize ?? originalSize)
+        var previous = Double(originalSize)
         for (tool, size) in toolResults.sorted(by: { $0.value > $1.value }) {
             if size < smallest { smallest = size; smallestTool = tool }
             let step = previous / Double(max(size, 1))
@@ -357,6 +427,8 @@ final class OptimizationJob: Identifiable {
                 ordered.append(SVGOTool(lossy: settings.lossy))
                 if settings.lossy { plan.usesLossy = true }
             }
+        default:
+            break
         }
 
         // Tools with side effects go first so the recompressors don't redo their work.
@@ -387,6 +459,19 @@ final class OptimizationJob: Identifiable {
     @concurrent
     private static func perform(_ tool: any OptimizationTool, input: ToolInput, options: ToolOptions) async throws -> TempFile? {
         try await tool.run(input, options: options)
+    }
+
+    @concurrent
+    private static func convert(url: URL, settings: SettingsSnapshot) async throws -> TempFile? {
+        try Task.checkCancellation()
+        let strip = settings.convertFormat == .png ? settings.stripPNGMetadata : settings.stripJPEGMetadata
+        return try ImageConverter.convert(url, to: settings.convertFormat, quality: settings.convertQuality, stripMetadata: strip)
+    }
+
+    @concurrent
+    private static func place(original: URL, converted: TempFile, settings: SettingsSnapshot) async throws -> FileSaver.Outcome {
+        try FileSaver.placeConverted(original: original, converted: converted, fileExtension: settings.convertFormat.fileExtension,
+                                     keepOriginal: settings.keepOriginalWhenConverting, preserveDates: settings.preserveDates)
     }
 
     @concurrent

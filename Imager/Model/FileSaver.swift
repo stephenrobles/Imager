@@ -107,6 +107,63 @@ nonisolated enum FileSaver {
         return (result as URL?) ?? url
     }
 
+    /// Puts a converted file next to the original under the original's name with the new
+    /// extension (a counter is added if that name is taken), then trashes the original unless asked
+    /// to keep it. Returns where the new file is and where the original went.
+    static func placeConverted(original url: URL, converted: TempFile, fileExtension: String, keepOriginal: Bool, preserveDates: Bool) throws -> Outcome {
+        let fm = FileManager.default
+        let folder = url.deletingLastPathComponent()
+        guard fm.isWritableFile(atPath: folder.path) else { throw Failure.folderNotWritable }
+        let base = url.deletingPathExtension().lastPathComponent
+        var destination = folder.appending(path: "\(base).\(fileExtension)")
+        var counter = 2
+        while fm.fileExists(atPath: destination.path), destination.path != url.path {
+            destination = folder.appending(path: "\(base) \(counter).\(fileExtension)")
+            counter += 1
+        }
+        if preserveDates, let attributes = try? fm.attributesOfItem(atPath: url.path) {
+            var dates: [FileAttributeKey: Any] = [:]
+            if let created = attributes[.creationDate] { dates[.creationDate] = created }
+            if let modified = attributes[.modificationDate] { dates[.modificationDate] = modified }
+            try? fm.setAttributes(dates, ofItemAtPath: converted.url.path)
+        }
+        var revertURL: URL?
+        if destination.path == url.path {
+            // Same name and extension (a .jpg converted to JPEG): behave like an in-place replacement.
+            return try replace(original: url, with: converted, preservePermissions: false, preserveDates: preserveDates)
+        }
+        if !keepOriginal {
+            revertURL = trash(url)
+            if revertURL == nil {
+                let backup = folder.appending(path: "\(url.lastPathComponent)~bak.\(url.pathExtension)")
+                try? fm.removeItem(at: backup)
+                try fm.moveItem(at: url, to: backup)
+                revertURL = trash(backup) ?? backup
+            }
+        }
+        do {
+            try fm.copyItem(at: converted.url, to: destination)
+        } catch {
+            if let revertURL { try? fm.moveItem(at: revertURL, to: url) }
+            throw Failure.cannotReplace(error.localizedDescription)
+        }
+        removeStaleAttributes(destination)
+        return Outcome(url: destination, revertURL: revertURL)
+    }
+
+    /// Undoes a conversion: removes the converted file and moves the original back to its path.
+    static func revertConversion(converted: URL, original: URL, from revertURL: URL, expectedSize: Int) throws {
+        let fm = FileManager.default
+        guard TempFile.size(of: revertURL) == expectedSize else {
+            throw Failure.cannotReplace("the saved original has changed")
+        }
+        if fm.fileExists(atPath: original.path) {
+            try fm.removeItem(at: original)
+        }
+        try fm.moveItem(at: revertURL, to: original)
+        if converted.path != original.path { try? fm.removeItem(at: converted) }
+    }
+
     private static func trash(_ url: URL) -> URL? {
         var trashed: NSURL?
         if (try? FileManager.default.trashItem(at: url, resultingItemURL: &trashed)) != nil {

@@ -88,6 +88,16 @@ struct MainView: View {
             .help("Add images or folders (⌘O)")
         }
         ToolbarItemGroup(placement: .primaryAction) {
+            Picker(selection: $settings.convertFormat) {
+                ForEach(ConvertFormat.allCases, id: \.self) { format in
+                    Text(format == .keep ? "Keep Format" : "Convert to \(format.title)").tag(format)
+                }
+            } label: {
+                Label("Convert", systemImage: "arrow.triangle.2.circlepath")
+            }
+            .pickerStyle(.menu)
+            .help("Re-encode dropped images in another format (AVIF, HEIC, JPEG or PNG) before optimizing. Quality is set in Settings › Convert.")
+
             Toggle(isOn: $settings.lossy) {
                 Label("Lossy", systemImage: "wand.and.sparkles")
             }
@@ -163,10 +173,10 @@ struct StatusIcon: View {
         case .waiting:
             Image(systemName: "clock")
                 .foregroundStyle(.secondary)
-        case .inspecting, .running:
+        case .inspecting, .running, .converting:
             ProgressView()
                 .controlSize(.small)
-        case .optimized:
+        case .optimized, .converted:
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(.green)
         case .unchanged:
@@ -208,16 +218,18 @@ struct SavingsCell: View {
                     ZStack(alignment: .leading) {
                         Capsule().fill(.quaternary)
                         Capsule()
-                            .fill(savings > 0 ? Color.green : Color.secondary)
-                            .frame(width: max(savings > 0 ? 3 : 0, geometry.size.width * min(1, savings)))
+                            .fill(savings > 0 ? Color.green : (savings < 0 ? Color.orange : Color.secondary))
+                            .frame(width: max(savings != 0 ? 3 : 0, geometry.size.width * min(1, abs(savings))))
                     }
                 }
                 .frame(height: 6)
                 .frame(maxWidth: 70)
-                Text(Format.percent(savings))
+                // A conversion can make a file bigger (JPEG to PNG, say); show that honestly.
+                Text(savings < 0 ? "+\(Format.percent(-savings))" : Format.percent(savings))
                     .monospacedDigit()
-                    .foregroundStyle(savings > 0 ? .primary : .secondary)
-                    .frame(width: 48, alignment: .trailing)
+                    .foregroundStyle(savings > 0 ? .primary : (savings < 0 ? Color.orange : .secondary))
+                    .frame(width: 52, alignment: .trailing)
+                    .help(savings < 0 ? "The converted file is larger than the original" : "")
             }
             .animation(.default, value: savings)
         } else {
@@ -246,6 +258,12 @@ struct StatusBar: View {
                     .truncationMode(.tail)
                     .textSelection(.enabled)
                 Spacer()
+                if settings.convertFormat != .keep {
+                    Label(settings.convertFormat.isLossy ? "To \(settings.convertFormat.title) · \(settings.convertQuality)%" : "To \(settings.convertFormat.title)",
+                          systemImage: "arrow.triangle.2.circlepath")
+                        .foregroundStyle(.secondary)
+                        .help("Dropped images are converted to \(settings.convertFormat.title) first. Change this in the toolbar or Settings › Convert.")
+                }
                 if settings.lossy {
                     Label(settings.snapshot.lossySummary.map { "Lossy · \($0)" } ?? "Lossy", systemImage: "wand.and.sparkles")
                         .foregroundStyle(.secondary)

@@ -55,6 +55,9 @@ struct AppCommands: Commands {
                 Text("Lossy").tag(true)
             }
             .pickerStyle(.inline)
+            Picker("Convert To", selection: Binding(get: { settings.convertFormat }, set: { settings.convertFormat = $0 })) {
+                ForEach(ConvertFormat.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
         }
 
         CommandGroup(after: .toolbar) {

@@ -38,12 +38,20 @@ struct DropZoneView: View {
                 }
                 .labelsHidden()
                 .fixedSize()
+                Text("Convert to")
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 10)
+                Picker("Convert to", selection: $settings.convertFormat) {
+                    ForEach(ConvertFormat.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                .labelsHidden()
+                .fixedSize()
                 Button("Settings…") { openSettings() }
                     .buttonStyle(.link)
                     .padding(.leading, 6)
             }
             .font(.callout)
-            .help("Lossless keeps every pixel and only removes what you can't see. Lossy also re-encodes images above the quality levels in Settings for much smaller files.")
+            .help("Lossless keeps every pixel and only removes what you can't see. Lossy also re-encodes images above the quality levels in Settings for much smaller files. Convert re-encodes every dropped image as AVIF, HEIC, JPEG or PNG first.")
             Spacer()
         }
         .padding(40)

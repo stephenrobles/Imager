@@ -65,8 +65,9 @@ final class OptimizationQueue {
 
     private func scanFolder(_ folder: URL) {
         pendingFolderScans += 1
+        let converting = AppSettings.shared.convertFormat != .keep
         Task {
-            for await batch in Self.imageBatches(in: folder) {
+            for await batch in Self.imageBatches(in: folder, converting: converting) {
                 addFiles(batch)
             }
             pendingFolderScans -= 1
@@ -76,7 +77,7 @@ final class OptimizationQueue {
 
     /// Walks a folder on a background thread, handing back images in growing batches so the
     /// first rows appear right away and a huge tree doesn't flood the main thread.
-    nonisolated private static func imageBatches(in folder: URL) -> AsyncStream<[URL]> {
+    nonisolated private static func imageBatches(in folder: URL, converting: Bool) -> AsyncStream<[URL]> {
         AsyncStream { continuation in
             let task = Task.detached(priority: .userInitiated) {
                 var batch: [URL] = []
@@ -85,7 +86,7 @@ final class OptimizationQueue {
                 if let enumerator = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles, .skipsPackageDescendants]) {
                     while let url = enumerator.nextObject() as? URL {
                         if Task.isCancelled { break }
-                        guard ImageKind.isSupported(url), (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { continue }
+                        guard ImageKind.isSupported(url, converting: converting), (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { continue }
                         batch.append(url)
                         if batch.count >= batchSize {
                             continuation.yield(batch)
@@ -107,7 +108,7 @@ final class OptimizationQueue {
         panel.canChooseDirectories = true
         panel.canChooseFiles = true
         panel.resolvesAliases = true
-        panel.allowedContentTypes = ImageKind.contentTypes + [.folder]
+        panel.allowedContentTypes = (AppSettings.shared.convertFormat == .keep ? ImageKind.optimizableTypes : ImageKind.convertibleTypes) + [.folder]
         panel.message = "Choose images or folders of images to shrink."
         panel.prompt = "Optimize"
         guard panel.runModal() == .OK else { return }

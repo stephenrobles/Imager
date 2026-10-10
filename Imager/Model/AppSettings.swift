@@ -23,6 +23,11 @@ nonisolated struct SettingsSnapshot: Sendable, Hashable {
     var gifsicleEnabled: Bool
     var svgoEnabled: Bool
     var lowPriority: Bool
+    var convertFormat: ConvertFormat
+    var convertQuality: Int
+    var keepOriginalWhenConverting: Bool
+
+    var isConverting: Bool { convertFormat != .keep }
 
     var handlesPNG: Bool { zopfliEnabled || optipngEnabled || pngcrushEnabled || advpngEnabled || (lossy && pngquantEnabled) }
     var handlesJPEG: Bool { jpegoptimEnabled || jpegtranEnabled }
@@ -35,6 +40,7 @@ nonisolated struct SettingsSnapshot: Sendable, Hashable {
         case .jpeg: handlesJPEG
         case .gif: handlesGIF
         case .svg: handlesSVG
+        default: false
         }
     }
 
@@ -82,6 +88,11 @@ final class AppSettings {
     var svgoEnabled: Bool { didSet { defaults.set(svgoEnabled, forKey: "svgoEnabled") } }
     /// Runs the tools at a lower priority so the Mac stays responsive during big batches.
     var lowPriority: Bool { didSet { defaults.set(lowPriority, forKey: "lowPriority") } }
+    /// Dropped raster images are re-encoded in this format first; "keep" leaves them as they are.
+    var convertFormat: ConvertFormat { didSet { defaults.set(convertFormat.rawValue, forKey: "convertFormat") } }
+    var convertQuality: Int { didSet { defaults.set(convertQuality, forKey: "convertQuality") } }
+    /// Leave the source file in place instead of trashing it after a conversion.
+    var keepOriginalWhenConverting: Bool { didSet { defaults.set(keepOriginalWhenConverting, forKey: "keepOriginalWhenConverting") } }
     var bounceDockWhenDone: Bool { didSet { defaults.set(bounceDockWhenDone, forKey: "bounceDockWhenDone") } }
     var notifyWhenDone: Bool { didSet { defaults.set(notifyWhenDone, forKey: "notifyWhenDone") } }
 
@@ -108,6 +119,9 @@ final class AppSettings {
         gifsicleEnabled = bool("gifsicleEnabled", true)
         svgoEnabled = bool("svgoEnabled", true)
         lowPriority = bool("lowPriority", false)
+        convertFormat = ConvertFormat(rawValue: stored.string(forKey: "convertFormat") ?? "") ?? .keep
+        convertQuality = int("convertQuality", 80)
+        keepOriginalWhenConverting = bool("keepOriginalWhenConverting", false)
         bounceDockWhenDone = bool("bounceDockWhenDone", true)
         notifyWhenDone = bool("notifyWhenDone", false)
     }
@@ -120,7 +134,8 @@ final class AppSettings {
             zopfliEnabled: zopfliEnabled, optipngEnabled: optipngEnabled, pngcrushEnabled: pngcrushEnabled,
             advpngEnabled: advpngEnabled, pngquantEnabled: pngquantEnabled, jpegoptimEnabled: jpegoptimEnabled,
             jpegtranEnabled: jpegtranEnabled, gifsicleEnabled: gifsicleEnabled, svgoEnabled: svgoEnabled,
-            lowPriority: lowPriority
+            lowPriority: lowPriority, convertFormat: convertFormat, convertQuality: convertQuality,
+            keepOriginalWhenConverting: keepOriginalWhenConverting
         )
     }
 
