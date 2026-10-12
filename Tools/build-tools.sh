@@ -4,11 +4,11 @@
 #
 # Usage:  Tools/build-tools.sh [tool …]
 #   With no arguments every tool is built. Otherwise only the named ones: optipng pngcrush
-#   zopflipng advpng pngquant mozjpeg jpegoptim gifsicle svgo.
+#   zopflipng advpng pngquant mozjpeg jpegoptim gifsicle svgo avif.
 #
 # Sources are fetched into build/tools/src (git tags and release tarballs pinned below) the
 # first time, and built in build/tools/work. Needs Xcode's clang, autoconf/automake (Homebrew)
-# for gifsicle and advancecomp, and node/npm for SVGO. No Rust or cmake.
+# for gifsicle and advancecomp, and node/npm for SVGO. No Rust; cmake comes from a local venv.
 #
 # The binaries are checked into git so the app builds without this script; rerun it after
 # bumping a version below.
@@ -260,9 +260,41 @@ EOF
 }
 
 # ---------------------------------------------------------------------------------------------
+# avif-encode: libavif + libaom, built with a cmake from a throwaway Python venv (no Homebrew
+# needed). arm64 only, like the app itself; aom's x86 assembly would need nasm.
+AOM_TAG=v3.12.1
+LIBAVIF_TAG=v1.3.0
+build_avif() {
+  log "Building avif-encode (libaom $AOM_TAG + libavif $LIBAVIF_TAG)"
+  fetch_git aom https://aomedia.googlesource.com/aom "$AOM_TAG"
+  fetch_git libavif https://github.com/AOMediaCodec/libavif "$LIBAVIF_TAG"
+  local venv="$ROOT/build/tools/venv"
+  [[ -x "$venv/bin/cmake" ]] || { python3 -m venv "$venv" && "$venv/bin/pip" install -q cmake ninja; }
+  export PATH="$venv/bin:$PATH"
+  local prefix="$WORK/prefix-avif"
+  rm -rf "$WORK/aom" "$WORK/libavif" "$prefix"
+  cmake -S "$SRC/aom" -B "$WORK/aom" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 \
+    -DCMAKE_OSX_DEPLOYMENT_TARGET=$MIN_MACOS -DAOM_TARGET_CPU=arm64 -DCONFIG_AV1_DECODER=0 -DENABLE_EXAMPLES=0 \
+    -DENABLE_TESTS=0 -DENABLE_TOOLS=0 -DENABLE_DOCS=0 -DENABLE_TESTDATA=0 -DBUILD_SHARED_LIBS=0 \
+    -DCMAKE_INSTALL_PREFIX="$prefix" > /dev/null
+  cmake --build "$WORK/aom" -j"$JOBS" > /dev/null
+  cmake --install "$WORK/aom" > /dev/null
+  cmake -S "$SRC/libavif" -B "$WORK/libavif" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 \
+    -DCMAKE_OSX_DEPLOYMENT_TARGET=$MIN_MACOS -DBUILD_SHARED_LIBS=OFF -DAVIF_CODEC_AOM=SYSTEM \
+    -DAVIF_CODEC_AOM_ENCODE=ON -DAVIF_CODEC_AOM_DECODE=OFF -DAVIF_LIBYUV=OFF -DAVIF_LIBSHARPYUV=OFF \
+    -DAVIF_JPEG=OFF -DAVIF_ZLIBPNG=OFF -DAVIF_BUILD_APPS=OFF -DAVIF_BUILD_EXAMPLES=OFF -DAVIF_BUILD_TESTS=OFF \
+    -DCMAKE_PREFIX_PATH="$prefix" -DCMAKE_INSTALL_PREFIX="$prefix" > /dev/null
+  cmake --build "$WORK/libavif" -j"$JOBS" > /dev/null
+  cmake --install "$WORK/libavif" > /dev/null
+  clang -O2 -arch arm64 -mmacosx-version-min=$MIN_MACOS -I"$prefix/include" -o "$WORK/avif-encode" \
+    "$ROOT/Tools/avif-encode/main.c" "$prefix/lib/libavif.a" "$prefix/lib/libaom.a" -lm -lpthread -Wl,-dead_strip
+  install_bin "$WORK/avif-encode" avif-encode
+}
+
+# ---------------------------------------------------------------------------------------------
 fetch_all
 tools=("$@")
-[[ ${#tools} -eq 0 ]] && tools=(optipng pngcrush zopflipng advpng pngquant mozjpeg jpegoptim gifsicle svgo)
+[[ ${#tools} -eq 0 ]] && tools=(optipng pngcrush zopflipng advpng pngquant mozjpeg jpegoptim gifsicle svgo avif)
 for tool in "${tools[@]}"; do
   "build_$tool"
 done

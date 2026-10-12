@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "beardfm-site",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8787",
+        "-d",
+        "/Users/ssrobles/Movies/Apps/beardfm.app/dist"
+      ],
+      "port": 8787
+    },
+    {
+      "name": "avif-test",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8790",
+        "-d",
+        "/private/tmp/claude-501/-Users-ssrobles-Movies-Apps-Imager/6b17e305-4031-491b-8c42-235e51e6903b/scratchpad/avif-serve"
+      ],
+      "port": 8790
+    }
+  ]
+}

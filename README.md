@@ -18,7 +18,9 @@ for macOS 26 and later.
 - Settings: effort level (fastest to insane), which tools run, metadata stripping, preserving
   permissions and dates, low priority, and what happens when a batch finishes.
 - **Convert** (toolbar menu, Settings › Convert, or Optimize › Convert To) re-encodes every dropped
-  image as AVIF, HEIC, JPEG or PNG first, with the encoder built into macOS 26 (no extra codecs).
+  image as AVIF, HEIC, JPEG or PNG first. AVIF is written by the bundled `avif-encode` helper
+  (libavif + libaom), because Apple's own AVIF encoder tiles anything over 512 px into a grid that
+  Firefox can't display; HEIC, JPEG and PNG use the encoder built into macOS 26.
   Quality is a slider (80% by default). With a format chosen, HEIC, WebP, TIFF and BMP files are
   accepted as well. The converted file takes the original's name with the new extension and the
   original goes to the Trash (or stays, with a switch); converted JPEGs and PNGs then go through the
@@ -40,18 +42,21 @@ next time.
 | JPEG | jpegoptim, MozJPEG's jpegtran |
 | GIF | Gifsicle (lossy mode uses its `--lossy` option) |
 | SVG | SVGO, run inside the app with JavaScriptCore |
+| AVIF output | avif-encode (libavif 1.3 + libaom 3.12), single-item files like avifenc and Squoosh |
 
-The command-line tools are universal (arm64 + x86_64) executables in `Helpers/`, embedded into
-`Contents/MacOS` and signed by the build. `Tools/build-tools.sh` fetches their sources (pinned
-versions; no Rust or cmake needed) and rebuilds them; the results are checked in so the app
-builds without it. SVGO is bundled as `Imager/Resources/svgo.js` by the same script.
+The command-line tools are universal (arm64 + x86_64) executables in `Helpers/` (avif-encode is
+arm64 only, like the app), embedded into `Contents/MacOS` and signed by the build.
+`Tools/build-tools.sh` fetches their sources (pinned versions; no Rust; cmake comes from a local
+Python venv) and rebuilds them; the results are checked in so the app builds without it. SVGO is
+bundled as `Imager/Resources/svgo.js` by the same script.
 
 ## Project notes
 
 - Xcode 27 project, macOS 26 or later, Swift with approachable concurrency and MainActor default
   isolation. Sources live in `Imager/` as a synchronized folder: `Model/` has the queue, jobs,
   tool wrappers, file saving and the results cache; `Views/` the SwiftUI.
-- `ImageConverter` wraps ImageIO (`CGImageDestination`) for the Convert feature; `FileSaver.placeConverted`
+- `ImageConverter` wraps ImageIO (`CGImageDestination`) for HEIC/JPEG/PNG and the `avif-encode`
+  helper (`Tools/avif-encode/main.c`) for AVIF; `FileSaver.placeConverted`
   names and places the result and `revertConversion` undoes it.
 - `OptimizationJob` owns one file's pipeline (conversion first, then the tools); `OptimizationQueue` holds the list, walks folders
   and limits concurrent tool processes to the core count (`CPUScheduler`). `ToolProcess` wraps

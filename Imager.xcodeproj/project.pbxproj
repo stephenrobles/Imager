@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		000000000000000150000000 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000170000000 /* Sparkle */; };
+		000000000000000210000000 /* avif-encode in Embed Helpers */ = {isa = PBXBuildFile; fileRef = 000000000000000200000000 /* avif-encode */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		000000000000000210000001 /* advpng in Embed Helpers */ = {isa = PBXBuildFile; fileRef = 000000000000000200000001 /* advpng */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		000000000000000210000002 /* gifsicle in Embed Helpers */ = {isa = PBXBuildFile; fileRef = 000000000000000200000002 /* gifsicle */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		000000000000000210000003 /* jpegoptim in Embed Helpers */ = {isa = PBXBuildFile; fileRef = 000000000000000200000003 /* jpegoptim */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
@@ -24,6 +25,7 @@
 			dstPath = "";
 			dstSubfolder = Executables;
 			files = (
+				000000000000000210000000 /* avif-encode in Embed Helpers */,
 				000000000000000210000001 /* advpng in Embed Helpers */,
 				000000000000000210000002 /* gifsicle in Embed Helpers */,
 				000000000000000210000003 /* jpegoptim in Embed Helpers */,
@@ -39,6 +41,7 @@
 
 /* Begin PBXFileReference section */
 		000000000000000000000120 /* Imager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Imager.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000200000000 /* avif-encode */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.executable"; path = "avif-encode"; sourceTree = "<group>"; };
 		000000000000000200000001 /* advpng */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.executable"; path = advpng; sourceTree = "<group>"; };
 		000000000000000200000002 /* gifsicle */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.executable"; path = gifsicle; sourceTree = "<group>"; };
 		000000000000000200000003 /* jpegoptim */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.executable"; path = jpegoptim; sourceTree = "<group>"; };
@@ -100,6 +103,7 @@
 		000000000000000000000030 /* Helpers */ = {
 			isa = PBXGroup;
 			children = (
+				000000000000000200000000 /* avif-encode */,
 				000000000000000200000001 /* advpng */,
 				000000000000000200000002 /* gifsicle */,
 				000000000000000200000003 /* jpegoptim */,
@@ -322,7 +326,7 @@
 				CODE_SIGN_ENTITLEMENTS = Imager/Imager.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -331,7 +335,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.graphics-design";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Stephen Robles";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = fm.beard.Imager;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -352,7 +356,7 @@
 				CODE_SIGN_ENTITLEMENTS = Imager/Imager.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -361,7 +365,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.graphics-design";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Stephen Robles";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = fm.beard.Imager;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;

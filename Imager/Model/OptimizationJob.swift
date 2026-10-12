@@ -465,7 +465,7 @@ final class OptimizationJob: Identifiable {
     private static func convert(url: URL, settings: SettingsSnapshot) async throws -> TempFile? {
         try Task.checkCancellation()
         let strip = settings.convertFormat == .png ? settings.stripPNGMetadata : settings.stripJPEGMetadata
-        return try ImageConverter.convert(url, to: settings.convertFormat, quality: settings.convertQuality, stripMetadata: strip)
+        return try await ImageConverter.convert(url, to: settings.convertFormat, quality: settings.convertQuality, stripMetadata: strip, lowPriority: settings.lowPriority)
     }
 
     @concurrent

@@ -1,0 +1,6 @@
+<h2>AVIF files that open everywhere</h2>
+<ul>
+  <li>Converting to AVIF now uses libavif and libaom, bundled inside the app, instead of the encoder built into macOS. Apple's encoder splits images larger than 512 pixels into a grid of tiles, which Firefox cannot display; the new files are single images that every browser opens.</li>
+  <li>The AVIF quality setting now means the same thing as in Squoosh and avifenc, so files come out around half the size they did at the same number.</li>
+  <li>AVIF output no longer carries EXIF metadata; the orientation is applied to the pixels instead.</li>
+</ul>
